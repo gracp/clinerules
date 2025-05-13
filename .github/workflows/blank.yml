@@ -1,0 +1,82 @@
+name: Sync Fork with Upstream
+
+# Controls when the workflow will run
+on:
+  schedule:
+    # Runs daily at midnight UTC. You can change this cron schedule.
+    # Example: '0 */6 * * *' would run every 6 hours.
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allows you to run this workflow manually from the Actions tab
+
+jobs:
+  sync_with_upstream:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Step 1: Check out your fork's repository (gracp/clinerules)
+      # The GITHUB_TOKEN is automatically provided by GitHub
+      # and has permissions to push to your fork.
+      - name: Checkout Fork
+        uses: actions/checkout@v4
+        with:
+          # We need to fetch all history for all branches and tags
+          # for the merge to work correctly with upstream.
+          fetch-depth: 0
+
+      # Step 2: Set up Git user for commit (if a merge commit is created)
+      - name: Set Git User
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+
+      # Step 3: Add the original (upstream) repository as a remote
+      - name: Add Upstream Remote
+        run: |
+          # This is the HTTPS URL of the original repository (cline/prompts)
+          git remote add upstream https://github.com/cline/prompts.git
+          echo "Upstream remote (cline/prompts) added."
+
+      # Step 4: Fetch changes from the upstream repository
+      - name: Fetch Upstream
+        run: |
+          git fetch upstream
+          echo "Fetched from upstream (cline/prompts)."
+
+      # Step 5: Merge changes from upstream's 'main' branch into your fork's 'main' branch
+      - name: Sync main Branch
+        run: |
+          # Both your fork and the upstream repository use 'main' as the default branch.
+          DEFAULT_BRANCH="main"
+
+          git checkout $DEFAULT_BRANCH
+          echo "Checked out $DEFAULT_BRANCH branch in gracp/clinerules."
+
+          # Try to merge.
+          echo "Attempting to merge upstream/$DEFAULT_BRANCH into $DEFAULT_BRANCH..."
+          MERGE_RESULT=$(git merge "upstream/$DEFAULT_BRANCH" --no-ff --no-edit)
+
+          if [[ $? -ne 0 ]]; then
+            echo "Merge failed. There might be conflicts between cline/prompts and gracp/clinerules."
+            echo "You'll need to resolve these conflicts manually in your gracp/clinerules repository."
+            # You could add 'git merge --abort' here if you want to ensure the workspace is clean for future runs
+            # git merge --abort
+            exit 1 # Fail the workflow
+          else
+            echo "Merge successful or gracp/clinerules is already up-to-date with upstream/main."
+            echo "$MERGE_RESULT"
+          fi
+
+      # Step 6: Push the updated 'main' branch to your fork (gracp/clinerules) on GitHub
+      - name: Push Changes to Fork
+        run: |
+          # Pushing the 'main' branch of your fork (gracp/clinerules)
+          DEFAULT_BRANCH="main"
+
+          git push origin $DEFAULT_BRANCH
+          echo "Pushed changes to origin/$DEFAULT_BRANCH (gracp/clinerules)."
+        env:
+          # The GITHUB_TOKEN is automatically provided by GitHub.
+          # It has write permissions to the repository where the action is running (your fork).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
